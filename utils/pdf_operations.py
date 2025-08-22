@@ -534,289 +534,7 @@ class PDFOperations:
             print(f"Thumbnail generation error: {str(e)}")
             return None
 
-    def add_watermark(self, file_path, session_id, watermark_options):
-        """Add watermark to PDF with comprehensive options"""
-        try:
-            from .validators import validate_watermark_options
-            import re
-            
-            is_valid, message = validate_watermark_options(watermark_options)
-            if not is_valid:
-                raise Exception(message)
-            
-            output_filename = f"{session_id}_watermarked.pdf"
-            output_path = os.path.join(self.config.OUTPUT_FOLDER, output_filename)
-            
-            doc = fitz.open(file_path)
-            total_pages = len(doc)
-            
-            # Determine which pages to apply watermark to
-            pages_to_process = self._get_pages_to_process(watermark_options, total_pages)
-            
-            for page_num in pages_to_process:
-                if page_num < total_pages:  # Safety check
-                    page = doc[page_num]
-                    
-                    if watermark_options['type'] == 'text':
-                        self._add_text_watermark(page, watermark_options)
-                    else:
-                        self._add_image_watermark(page, watermark_options)
-            
-            doc.save(output_path)
-            doc.close()
-            
-            return {
-                'success': True,
-                'output_path': output_path,
-                'filename': output_filename,
-                'message': f'ವಾಟರ್‌ಮಾರ್ಕ್ ಯಶಸ್ವಿಯಾಗಿ ಸೇರಿಸಲಾಗಿದೆ - {len(pages_to_process)} ಪುಟಗಳಲ್ಲಿ'
-            }
-            
-        except Exception as e:
-            raise Exception(f"ವಾಟರ್‌ಮಾರ್ಕ್ ಸೇರಿಸುವಿಕೆ ವಿಫಲ: {str(e)}")
-
-    def _get_pages_to_process(self, options, total_pages):
-        """Determine which pages to apply watermark based on options"""
-        pages_filter = options.get('watermark_pages', 'all')
-        
-        if pages_filter == 'all':
-            return list(range(total_pages))
-        elif pages_filter == 'odd':
-            return [i for i in range(total_pages) if (i + 1) % 2 == 1]  # 1-based odd pages
-        elif pages_filter == 'even':
-            return [i for i in range(total_pages) if (i + 1) % 2 == 0]  # 1-based even pages
-        elif pages_filter == 'custom':
-            custom_pages = options.get('custom_pages', '')
-            if custom_pages:
-                return self._parse_watermark_page_ranges(custom_pages, total_pages)
-            else:
-                return list(range(total_pages))
-        else:
-            return list(range(total_pages))
-
-    def _parse_watermark_page_ranges(self, pages_str, total_pages):
-        """Parse page ranges like '1,3,5-10' into list of 0-based page indices"""
-        pages = []
-        parts = pages_str.split(',')
-        
-        for part in parts:
-            part = part.strip()
-            if '-' in part:
-                try:
-                    start, end = map(int, part.split('-'))
-                    # Convert to 0-based and ensure valid range
-                    start = max(1, min(start, total_pages)) - 1
-                    end = max(1, min(end, total_pages)) - 1
-                    pages.extend(range(start, end + 1))
-                except ValueError:
-                    continue
-            else:
-                try:
-                    page_num = int(part)
-                    if 1 <= page_num <= total_pages:
-                        pages.append(page_num - 1)  # Convert to 0-based
-                except ValueError:
-                    continue
-        
-        return sorted(list(set(pages)))  # Remove duplicates and sort
-
-    def _add_text_watermark(self, page, options):
-        """Add text watermark to page with enhanced features"""
-        rect = page.rect
-        text = options.get('text', 'ವಾಟರ್‌ಮಾರ್ಕ್')
-        font_size = float(options.get('font_size', 50))
-        rotation = float(options.get('rotation', 0))
-        opacity = float(options.get('opacity', 50)) / 100.0
-        color = options.get('color', '#000000')
-        font_family = options.get('font_family', 'Helvetica')
-        position = options.get('position', 'center')
-        layer_position = options.get('layer_position', 'below')
-        repeat_watermark = options.get('repeat_watermark', False)
-        
-        # Enhanced Kannada font support
-        if self._is_kannada_text(text) or font_family == 'noto-sans-kannada':
-            font_family = 'noto-sans-kannada'
-        
-        # Calculate positions
-        positions = self._calculate_watermark_positions(rect, position, repeat_watermark, font_size, text)
-        
-        for x, y in positions:
-            try:
-                # Create watermark with opacity simulation (PyMuPDF doesn't support text opacity directly)
-                if opacity < 1.0:
-                    # For semi-transparent text, we'll use a lighter color
-                    rgb_color = self._hex_to_rgb(color)
-                    # Blend with white background to simulate opacity
-                    adjusted_color = tuple(min(1.0, c + (1.0 - c) * (1.0 - opacity)) for c in rgb_color)
-                else:
-                    adjusted_color = self._hex_to_rgb(color)
-                
-                # Insert text with proper font handling
-                if font_family == 'noto-sans-kannada':
-                    # Try to use system Kannada fonts
-                    for kannada_font in ['Noto Sans Kannada', 'Tunga', 'Kedage', 'Sampige']:
-                        try:
-                            page.insert_text(
-                                (x, y),
-                                text,
-                                fontname=kannada_font,
-                                fontsize=font_size,
-                                color=adjusted_color,
-                                rotate=rotation
-                            )
-                            break
-                        except:
-                            continue
-                    else:
-                        # Fallback to default font if no Kannada font works
-                        page.insert_text(
-                            (x, y),
-                            text,
-                            fontsize=font_size,
-                            color=adjusted_color,
-                            rotate=rotation
-                        )
-                else:
-                    # Standard fonts
-                    page.insert_text(
-                        (x, y),
-                        text,
-                        fontname=font_family,
-                        fontsize=font_size,
-                        color=adjusted_color,
-                        rotate=rotation
-                    )
-                    
-            except Exception as e:
-                print(f"Warning: Could not add watermark at position ({x}, {y}): {e}")
-                # Try with default settings as fallback
-                try:
-                    page.insert_text(
-                        (x, y),
-                        text,
-                        fontsize=font_size,
-                        color=self._hex_to_rgb(color),
-                        rotate=rotation
-                    )
-                except:
-                    pass  # Skip this position if it fails completely
-
-    def _is_kannada_text(self, text):
-        """Check if text contains Kannada characters"""
-        import re
-        # Kannada Unicode range: U+0C80–U+0CFF
-        kannada_pattern = re.compile(r'[\u0C80-\u0CFF]')
-        return bool(kannada_pattern.search(text))
-
-    def _calculate_watermark_positions(self, rect, position, repeat_watermark, font_size, text):
-        """Calculate watermark positions based on options"""
-        positions = []
-        
-        if repeat_watermark:
-            # Create a grid of watermarks across the page
-            spacing_x = font_size * len(text) * 0.6  # Approximate text width
-            spacing_y = font_size * 1.5  # Line spacing
-            
-            for x in range(int(spacing_x/2), int(rect.width), int(spacing_x)):
-                for y in range(int(spacing_y), int(rect.height), int(spacing_y)):
-                    positions.append((x, y))
-        else:
-            # Single watermark at specified position
-            if position == 'center':
-                x, y = rect.width / 2, rect.height / 2
-            elif position == 'top-left':
-                x, y = 50, rect.height - 50
-            elif position == 'top-center':
-                x, y = rect.width / 2, rect.height - 50
-            elif position == 'top-right':
-                x, y = rect.width - 50, rect.height - 50
-            elif position == 'middle-left':
-                x, y = 50, rect.height / 2
-            elif position == 'middle-right':
-                x, y = rect.width - 50, rect.height / 2
-            elif position == 'bottom-left':
-                x, y = 50, 50
-            elif position == 'bottom-center':
-                x, y = rect.width / 2, 50
-            elif position == 'bottom-right':
-                x, y = rect.width - 50, 50
-            else:
-                x, y = rect.width / 2, rect.height / 2
-            
-            positions.append((x, y))
-        
-        return positions
-
-    def _add_image_watermark(self, page, options):
-        """Add image watermark to page with enhanced features"""
-        if 'image_path' not in options or not os.path.exists(options['image_path']):
-            return
-        
-        rect = page.rect
-        position = options.get('position', 'center')
-        image_scale = float(options.get('image_scale', 20)) / 100.0  # Convert percentage to decimal
-        rotation = float(options.get('rotation', 0))
-        repeat_watermark = options.get('repeat_watermark', False)
-        
-        # Calculate image size based on scale
-        base_size = min(rect.width, rect.height) * image_scale
-        
-        if repeat_watermark:
-            # Create a grid of image watermarks
-            spacing = base_size * 2
-            positions = []
-            for x in range(int(spacing/2), int(rect.width), int(spacing)):
-                for y in range(int(spacing/2), int(rect.height), int(spacing)):
-                    positions.append((x - base_size/2, y - base_size/2))
-        else:
-            # Single image watermark
-            if position == 'center':
-                x = rect.width / 2 - base_size / 2
-                y = rect.height / 2 - base_size / 2
-            elif position == 'top-left':
-                x, y = 50, rect.height - 50 - base_size
-            elif position == 'top-center':
-                x = rect.width / 2 - base_size / 2
-                y = rect.height - 50 - base_size
-            elif position == 'top-right':
-                x = rect.width - 50 - base_size
-                y = rect.height - 50 - base_size
-            elif position == 'middle-left':
-                x = 50
-                y = rect.height / 2 - base_size / 2
-            elif position == 'middle-right':
-                x = rect.width - 50 - base_size
-                y = rect.height / 2 - base_size / 2
-            elif position == 'bottom-left':
-                x, y = 50, 50
-            elif position == 'bottom-center':
-                x = rect.width / 2 - base_size / 2
-                y = 50
-            elif position == 'bottom-right':
-                x = rect.width - 50 - base_size
-                y = 50
-            else:
-                x = rect.width / 2 - base_size / 2
-                y = rect.height / 2 - base_size / 2
-            
-            positions = [(x, y)]
-        
-        # Insert images at calculated positions
-        for x, y in positions:
-            try:
-                image_rect = fitz.Rect(x, y, x + base_size, y + base_size)
-                
-                # Note: PyMuPDF has limited rotation support for images
-                # Rotation would need to be applied during image processing
-                page.insert_image(image_rect, filename=options['image_path'])
-                
-            except Exception as e:
-                print(f"Warning: Could not add image watermark at position ({x}, {y}): {e}")
-
-    def _hex_to_rgb(self, hex_color):
-        """Convert hex color to RGB tuple"""
-        hex_color = hex_color.lstrip('#')
-        return tuple(int(hex_color[i:i+2], 16)/255.0 for i in (0, 2, 4))
+    # ...existing code...
 
     def protect_pdf(self, file_path, session_id, protection_options):
         """Protect PDF with password and permissions using PyPDF2 for better compatibility"""
@@ -899,3 +617,70 @@ class PDFOperations:
         except Exception as e:
             print(f"Protection error: {str(e)}")
             return {'success': False, 'error': f'PDF ರಕ್ಷಣೆ ವಿಫಲ: {str(e)}'}
+
+    def unlock_pdf(self, file_path, password, session_id):
+        """Remove password protection from PDF file"""
+        try:
+            if not os.path.exists(file_path):
+                raise Exception('PDF ಫೈಲ್ ಕಂಡುಬಂದಿಲ್ಲ')
+            
+            if not password or password.strip() == '':
+                raise Exception('ಪಾಸ್‌ವರ್ಡ್ ಅಗತ್ಯ')
+            
+            # Check if file is actually encrypted
+            try:
+                reader = PdfReader(file_path)
+                if not reader.is_encrypted:
+                    raise Exception('ಈ PDF ಫೈಲ್ ರಕ್ಷಿತವಾಗಿಲ್ಲ')
+            except Exception as e:
+                if "not encrypted" in str(e):
+                    raise e
+                # If we can't read it, assume it's encrypted and continue
+                pass
+            
+            # Try to decrypt the PDF
+            reader = PdfReader(file_path)
+            
+            if not reader.decrypt(password):
+                raise Exception('ತಪ್ಪು ಪಾಸ್‌ವರ್ಡ್ - ದಯವಿಟ್ಟು ಸರಿಯಾದ ಪಾಸ್‌ವರ್ಡ್ ನಮೂದಿಸಿ')
+            
+            # Create output filename
+            original_name = os.path.splitext(os.path.basename(file_path))[0]
+            output_filename = f"{session_id}_{original_name}_unlocked.pdf"
+            output_path = os.path.join('output', output_filename)
+            
+            # Ensure output directory exists
+            os.makedirs('output', exist_ok=True)
+            
+            # Create new unlocked PDF
+            writer = PdfWriter()
+            
+            # Add all pages to the writer
+            for page_num in range(len(reader.pages)):
+                page = reader.pages[page_num]
+                writer.add_page(page)
+            
+            # Write the unlocked PDF
+            with open(output_path, 'wb') as output_file:
+                writer.write(output_file)
+            
+            # Verify the output file was created properly
+            if not os.path.exists(output_path):
+                raise Exception('ಔಟ್‌ಪುಟ್ ಫೈಲ್ ರಚಿಸಲಾಗಿಲ್ಲ')
+            
+            file_size = os.path.getsize(output_path)
+            if file_size == 0:
+                raise Exception('ಖಾಲಿ ಫೈಲ್ ರಚಿಸಲಾಗಿದೆ')
+            
+            print(f"Unlocked PDF created successfully: {file_size} bytes")
+            
+            return {
+                'success': True,
+                'output_path': output_path,
+                'filename': output_filename,
+                'message': f'PDF ಯಶಸ್ವಿಯಾಗಿ ಅನ್‌ಲಾಕ್ ಮಾಡಲಾಗಿದೆ'
+            }
+            
+        except Exception as e:
+            print(f"Unlock error: {str(e)}")
+            return {'success': False, 'error': f'PDF ಅನ್‌ಲಾಕ್ ವಿಫಲ: {str(e)}'}

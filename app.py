@@ -317,71 +317,6 @@ def upload_file():
             elif operation == 'pdf_to_jpeg':
                 result_path = pdf_ops.pdf_to_images(file_paths[0], session_id)
                 
-            elif operation == 'jpeg_to_pdf':
-                result_path = pdf_ops.images_to_pdf(file_paths, session_id)
-                
-            elif operation == 'pdf_to_word':
-                result_path = pdf_ops.pdf_to_word(file_paths[0], session_id)
-                
-            elif operation == 'word_to_pdf':
-                result_path = pdf_ops.word_to_pdf(file_paths[0], session_id)
-                
-            elif operation == 'sort':
-                result_path = pdf_ops.sort_pdf_by_page_numbers(file_paths[0], session_id, pages)
-                
-            elif operation == 'watermark':
-                from utils.validators import validate_watermark_options
-                
-                # Determine watermark type from form data
-                watermark_type = request.form.get('watermark_type', 'text')
-                
-                watermark_options = {
-                    'type': watermark_type,
-                    'text': request.form.get('watermark_text', 'ವಾಟರ್‌ಮಾರ್ಕ್'),
-                    'font_family': request.form.get('font_family', 'Helvetica'),
-                    'font_size': int(request.form.get('font_size', 50)),
-                    'color': request.form.get('watermark_color', '#000000'),
-                    'opacity': float(request.form.get('opacity', 50)),
-                    'rotation': float(request.form.get('rotation', 0)),
-                    'position': request.form.get('position', 'center'),
-                    'layer_position': request.form.get('layer_position', 'below'),
-                    'watermark_pages': request.form.get('watermark_pages', 'all'),
-                    'repeat_watermark': request.form.get('repeat_watermark', 'false') == 'true',
-                    'image_scale': float(request.form.get('image_scale', 20)) if watermark_type == 'image' else 20
-                }
-                
-                # Handle custom pages
-                if watermark_options['watermark_pages'] == 'custom':
-                    custom_pages = request.form.get('custom_pages', '').strip()
-                    if custom_pages:
-                        watermark_options['custom_pages'] = custom_pages
-                    else:
-                        return jsonify({'success': False, 'error': 'ನಿರ್ದಿಷ್ಟ ಪುಟ ಸಂಖ್ಯೆಗಳು ಅಗತ್ಯ'})
-                
-                # Handle image watermark
-                if watermark_type == 'image':
-                    if 'watermark_image' in request.files:
-                        watermark_file = request.files['watermark_image']
-                        if watermark_file and watermark_file.filename:
-                            watermark_filename = secure_filename(watermark_file.filename)
-                            watermark_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{session_id}_watermark_{watermark_filename}")
-                            watermark_file.save(watermark_path)
-                            watermark_options['image_path'] = watermark_path
-                        else:
-                            return jsonify({'success': False, 'error': 'ವಾಟರ್‌ಮಾರ್ಕ್ ಚಿತ್ರ ಅಗತ್ಯ'})
-                    else:
-                        return jsonify({'success': False, 'error': 'ವಾಟರ್‌ಮಾರ್ಕ್ ಚಿತ್ರ ಅಗತ್ಯ'})
-                
-                # Validate watermark options
-                is_valid, validation_message = validate_watermark_options(watermark_options)
-                if not is_valid:
-                    return jsonify({'success': False, 'error': f'ವಾಟರ್‌ಮಾರ್ಕ್ ಸೆಟ್ಟಿಂಗ್ ದೋಷ: {validation_message}'})
-                
-                result = pdf_ops.add_watermark(file_paths[0], session_id, watermark_options)
-                if result['success']:
-                    result_path = result['output_path']
-                else:
-                    return jsonify(result)
                 
             elif operation == 'protect':
                 protection_options = {
@@ -403,6 +338,20 @@ def upload_file():
                     return jsonify({'success': False, 'error': 'ಪಾಸ್‌ವರ್ಡ್‌ಗಳು ಹೊಂದಿಕೆಯಾಗುತ್ತಿಲ್ಲ'})
                 
                 result = pdf_ops.protect_pdf(file_paths[0], session_id, protection_options)
+                if result['success']:
+                    result_path = result['output_path']
+                    flash(result['message'], 'success')
+                else:
+                    return jsonify({'success': False, 'error': result['error']})
+                
+            elif operation == 'unlock':
+                unlock_password = request.form.get('unlock_password', '').strip()
+                
+                # Validate password
+                if not unlock_password:
+                    return jsonify({'success': False, 'error': 'ಪಾಸ್‌ವರ್ಡ್ ಅಗತ್ಯ'})
+                
+                result = pdf_ops.unlock_pdf(file_paths[0], unlock_password, session_id)
                 if result['success']:
                     result_path = result['output_path']
                     flash(result['message'], 'success')
@@ -583,5 +532,5 @@ def cleanup_old_files():
 
 if __name__ == '__main__':
     cleanup_old_files()
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
 

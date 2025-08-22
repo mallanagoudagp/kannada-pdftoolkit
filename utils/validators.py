@@ -27,7 +27,8 @@ def validate_file(file, operation):
         'word_to_pdf': config.ALLOWED_EXTENSIONS['word'],
         'jpeg_to_pdf': config.ALLOWED_EXTENSIONS['image'],
         'sort': config.ALLOWED_EXTENSIONS['pdf'],
-        'watermark': config.ALLOWED_EXTENSIONS['pdf']
+        'protect': config.ALLOWED_EXTENSIONS['pdf'],
+        'unlock': config.ALLOWED_EXTENSIONS['pdf']
     }
     
     # Check if operation is supported
@@ -85,96 +86,16 @@ def validate_crop_margins(left, top, right, bottom):
     except:
         return False
 
-def get_allowed_extensions(operation):
-    """Get allowed file extensions for an operation"""
-    operation_requirements = {
-        'merge': config.ALLOWED_EXTENSIONS['pdf'],
-        'split': config.ALLOWED_EXTENSIONS['pdf'],
-        'extract': config.ALLOWED_EXTENSIONS['pdf'],
-        'delete': config.ALLOWED_EXTENSIONS['pdf'],
-        'crop': config.ALLOWED_EXTENSIONS['pdf'],
-        'rotate': config.ALLOWED_EXTENSIONS['pdf'],
-        'compress': config.ALLOWED_EXTENSIONS['pdf'],
-        'pdf_to_word': config.ALLOWED_EXTENSIONS['pdf'],
-        'pdf_to_jpeg': config.ALLOWED_EXTENSIONS['pdf'],
-        'word_to_pdf': config.ALLOWED_EXTENSIONS['word'],
-        'jpeg_to_pdf': config.ALLOWED_EXTENSIONS['image'],
-        'sort': config.ALLOWED_EXTENSIONS['pdf'],
-        'watermark': config.ALLOWED_EXTENSIONS['pdf']
-    }
-    
-    return operation_requirements.get(operation, set())
-
-def is_safe_filename(filename):
-    """Check if filename is safe (no path traversal, etc.)"""
-    import re
-    
-    # Check for path traversal attempts
-    if '..' in filename or '/' in filename or '\\' in filename:
-        return False
-    
-    # Check for valid characters
-    safe_pattern = re.compile(r'^[a-zA-Z0-9._-]+$')
-    return safe_pattern.match(filename) is not None
-
-def validate_watermark_options(options):
-    """Validate watermark options"""
+def validate_unlock_options(options):
+    """Validate unlock PDF options"""
     try:
-        # Check watermark type
-        if options.get('type') not in ['text', 'image']:
-            return False, "Invalid watermark type"
+        password = options.get('password', '').strip()
         
-        # Validate text watermark
-        if options.get('type') == 'text':
-            text = options.get('text', '').strip()
-            if not text:
-                return False, "Watermark text is required"
-            
-            # Validate font size
-            try:
-                font_size = int(options.get('font_size', 50))
-                if font_size < 10 or font_size > 200:
-                    return False, "Font size must be between 10 and 200"
-            except ValueError:
-                return False, "Invalid font size"
+        if not password:
+            return False, "ಪಾಸ್‌ವರ್ಡ್ ಅಗತ್ಯ"
         
-        # Validate image watermark
-        if options.get('type') == 'image':
-            image_path = options.get('image_path')
-            if not image_path or not os.path.exists(image_path):
-                return False, "Watermark image is required"
-            
-            # Check if it's a valid image file
-            valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']
-            file_ext = os.path.splitext(image_path)[1].lower()
-            if file_ext not in valid_extensions:
-                return False, "Invalid image format"
-        
-        # Validate opacity
-        try:
-            opacity = float(options.get('opacity', 50))
-            if opacity < 0 or opacity > 100:
-                return False, "Opacity must be between 0 and 100"
-        except ValueError:
-            return False, "Invalid opacity value"
-        
-        # Validate rotation
-        try:
-            rotation = float(options.get('rotation', 0))
-            if rotation < -360 or rotation > 360:
-                return False, "Rotation must be between -360 and 360 degrees"
-        except ValueError:
-            return False, "Invalid rotation value"
-        
-        # Validate position
-        valid_positions = [
-            'top-left', 'top-center', 'top-right',
-            'middle-left', 'center', 'middle-right',
-            'bottom-left', 'bottom-center', 'bottom-right'
-        ]
-        position = options.get('position', 'center')
-        if position not in valid_positions:
-            return False, "Invalid position"
+        if len(password) < 1:
+            return False, "ಪಾಸ್‌ವರ್ಡ್ ಖಾಲಿಯಾಗಿರಬಾರದು"
         
         return True, "Valid"
         
