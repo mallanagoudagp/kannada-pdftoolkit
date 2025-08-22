@@ -1,6 +1,6 @@
 """
 Font Manager for Kannada Support
-Handles downloading and managing Kannada fonts for watermarks
+Handles downloading and managing Kannada fonts for PDF text operations
 """
 
 import os
@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 class KannadaFontManager:
-    """Manages Kannada fonts for PDF watermarks"""
+    """Manages Kannada fonts for PDF text operations"""
     
     def __init__(self):
         self.fonts_dir = os.path.join(os.path.dirname(__file__), '..', 'static', 'fonts')
